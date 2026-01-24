@@ -260,7 +260,7 @@ def leaderboard_keyboard(active: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [btn("Today", "today"), btn("Weekly", "week")],
         [btn("Monthly", "month"), btn("All Time", "all")],
-        [InlineKeyboardButton("➥ CLOSE", callback_data="close_msg")]
+        [InlineKeyboardButton("✗ ƈʅσʂҽ ✗", callback_data="close_msg")]
     ])
 
 def leaderboard_title(active: str) -> str:

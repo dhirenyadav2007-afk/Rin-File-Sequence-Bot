@@ -1218,7 +1218,7 @@ async def mode_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = (
         f"<b>Select Sorting Mode (Current: {cur.capitalize()})</b>\n\n"
-        "</blockquote>• Quality: Sort by quality then episode\n"
+        "<blockquote>• Quality: Sort by quality then episode\n"
         "• Title: Sort by title then episode\n"
         "• Both: Sort by title, quality, then episode\n"
         "• Episode: Default sorting by episode only\n"

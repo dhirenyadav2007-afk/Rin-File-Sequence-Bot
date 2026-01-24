@@ -34,13 +34,15 @@ PHOTO_MAIN = "AgACAgUAAxkBAAMGaXOk8L4z6FfrXhXclo3L3tDVrm4AAnwOaxvkYqBXleYmmn3KS1
 PHOTO_HELP = "AgACAgUAAxkBAAMCaXOk4gUGDrU91EzVev2vIznOHpQAAlgOaxvkYqBX6rf8QmqmOiEACAEAAwIAA3gABx4E"
 RESTART_PHOTO_ID = "AgACAgUAAxkBAAMFaXOk7FSbWYk9gEVhfZdZL0wUU7cAAnsOaxvkYqBXlJN8BHerHYMACAEAAwIAA3kABx4E"
 PHOTO_STATUS = "AgACAgUAAxkBAAMEaXOk6B0-7bpeZNheu1ejAVzjls4AAnkOaxvkYqBXhV3VNL3euyAACAEAAwIAA3kABx4E"
-OWNER_ID = int(os.getenv("OWNER_ID", "6213241700"))
+OWNER_ID = int(os.getenv("OWNER_ID", "7816936715"))
 MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://ANI_OTAKU:ANI_OTAKU@cluster0.t3frstc.mongodb.net/?appName=Cluster0")
 DB_NAME = os.getenv("DB_NAME", "RIN_FILE_SEQUENCE_BOT")
 
 mongo = MongoClient(MONGO_URI)
 db = mongo[DB_NAME]
 
+settings_col = db["settings"]
+settings_col = db["settings"]
 caps_col = db["captions"]   # {_id: user_id, caption_text}
 users_col = db["users"]     # {_id: user_id, first_name, username, joined_at}
 stats_col = db["stats"]     # {_id:"bot", total_sorted_files, last_restarted}
@@ -1492,31 +1494,27 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------- RESTART BROADCAST (ALWAYS ON REDEPLOY) ----------
 async def broadcast_restart(application: Application):
     RE_caption = (
-        "<blockquote expandable>🔄 Bot Restarted Successfully!</b>\n\n"
+        "<blockquote expandable>"
+        "🔄 <b>Bot Restarted Successfully!\n\n"
         "✅ New changes have been deployed.\n"
         "🚀 Bot is now online and running smoothly.\n\n"
-        "Thank you for your patience.</blockquote>"
+        "Thank you for your patience.</b>"
+        "</blockquote>"
     )
 
     buttons = InlineKeyboardMarkup(
-        [[
-            InlineKeyboardButton("Dҽʋҽʅσρҽɾ", url="https://t.me/ITSANIMEN"),
-            InlineKeyboardButton("Cԋαɳɳҽʅ", url="https://t.me/BotifyX_Pro")
-        ]]
+        [
+            [
+                InlineKeyboardButton("ʂυρρσɾƚ", url="https://t.me/BotifyX_support"),
+                InlineKeyboardButton("Cԋαɳɳҽʅ", url="https://t.me/BotifyX_Pro")
+            ]
+        ]
     )
 
-    # fetch all users from mongo
-    user_ids = []
-    try:
-        user_ids = [u["_id"] for u in users_col.find({}, {"_id": 1})]
-    except:
-        user_ids = []
-
-    # broadcast
-    for chat_id in user_ids:
+    for user in users_col.find({}):
         try:
             await application.bot.send_photo(
-                chat_id=chat_id,
+                chat_id=user["_id"],
                 photo=RESTART_PHOTO_ID,
                 caption=RE_caption,
                 reply_markup=buttons,
@@ -1524,20 +1522,8 @@ async def broadcast_restart(application: Application):
             )
         except RetryAfter as e:
             await asyncio.sleep(e.retry_after)
-            # retry once
-            try:
-                await application.bot.send_photo(
-                    chat_id=chat_id,
-                    photo=RESTART_PHOTO_ID,
-                    caption=RE_caption,
-                    reply_markup=buttons,
-                    parse_mode=constants.ParseMode.HTML
-                )
-            except:
-                pass
         except:
-            # blocked/deleted etc - ignore
-            pass
+            continue
 
 # ---------- POST INIT ----------
 async def post_init(application: Application):

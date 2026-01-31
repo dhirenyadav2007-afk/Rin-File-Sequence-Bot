@@ -31,7 +31,7 @@ from pymongo import MongoClient
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8411778153:AAG4yI8fjrMJkGLn4KQ4oVciSkVW0D3KuDk")
 PHOTO_MAIN = "https://ibb.co/0pp4v8xM"
-PHOTO_HELP = "https://ibb.co/wZCjM8JZ"
+PHOTO_HELP = "https://ibb.co/0pp4v8xM"
 RESTART_PHOTO_ID = "https://ibb.co/Z6KmPCsX"
 PHOTO_STATUS = "https://ibb.co/nq9MnMkj"
 OWNER_ID = int(os.getenv("OWNER_ID", "7816936715"))

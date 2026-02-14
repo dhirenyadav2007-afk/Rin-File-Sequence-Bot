@@ -494,7 +494,7 @@ def start_keyboard():
                 InlineKeyboardButton("Dҽʋҽʅσρҽɾ", url="https://t.me/ITSANIMEN")
             ],
             [
-                InlineKeyboardButton("Cԋαɳɳҽʅ", url="https://t.me/BotifyX_Pro")
+                InlineKeyboardButton("Cԋαɳɳҽʅ", url="https://t.me/BotifyX_Pro_Botz")
             ]
         ]
     )

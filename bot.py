@@ -1506,7 +1506,7 @@ async def broadcast_restart(application: Application):
         [
             [
                 InlineKeyboardButton("ʂυρρσɾƚ", url="https://t.me/BotifyX_support"),
-                InlineKeyboardButton("Cԋαɳɳҽʅ", url="https://t.me/BotifyX_Pro")
+                InlineKeyboardButton("Cԋαɳɳҽʅ", url="https://t.me/BotifyX_Pro_Botz")
             ]
         ]
     )

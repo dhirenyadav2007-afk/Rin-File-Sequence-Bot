@@ -217,7 +217,11 @@ def build_caption(template: str | None, meta: str) -> str | None:
     fname = extract_filename_from_meta(meta)
 
     out = template
-    out = out.replace("{file_name}", fname)
+    # 🔥 remove filename for documents only
+    if is_document:
+        out = out.replace("{file_name}", "")
+    else:
+        out = out.replace("{file_name}", fname)
     out = out.replace("{episode}", str(ep) if ep is not None else "")
     out = out.replace("{quality}", q or "")
 
@@ -636,7 +640,8 @@ async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         last_group = None
 
         for it in sorted_items:
-            cap = build_caption(template, it.get("meta", ""))  # ✅ build caption per file
+            is_doc = ".pdf" in (it.get("meta","").lower())
+            cap = build_caption(template, it.get("meta", ""), is_doc)  # ✅ build caption per file
 
             cur_group = _q_group(it.get("meta", "")) if can_quality_sticker else None
 
@@ -727,7 +732,8 @@ async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         last_group = None
 
         for it in sorted_items:
-            cap = build_caption(template, it.get("meta", ""))  # ✅ build caption per file
+            is_doc = ".pdf" in (it.get("meta","").lower())
+            cap = build_caption(template, it.get("meta", ""), is_doc)  # ✅ build caption per file
 
             cur_group = _q_group(it.get("meta", "")) if can_quality_sticker else None
 

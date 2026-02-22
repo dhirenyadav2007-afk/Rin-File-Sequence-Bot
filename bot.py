@@ -652,45 +652,40 @@ async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     last_group = cur_group
 
             try:
-                m = await context.bot.copy_message(
-                    chat_id=dump_id,
-                    from_chat_id=it["chat_id"],
-                    message_id=it["message_id"]
-                )
-                sent_count += 1
-
-                # ✅ Apply caption if possible
                 if cap:
-                    try:
-                        await context.bot.edit_message_caption(
-                            chat_id=dump_id,
-                            message_id=m.message_id,
-                            caption=cap,
-                            parse_mode=constants.ParseMode.HTML
-                        )
-                    except:
-                        pass
-
-            except RetryAfter as e:
-                await asyncio.sleep(e.retry_after)
-                try:
-                    m = await context.bot.copy_message(
+                    await context.bot.copy_message(
+                        chat_id=dump_id,
+                        from_chat_id=it["chat_id"],
+                        message_id=it["message_id"],
+                        caption=cap,
+                        parse_mode=constants.ParseMode.HTML
+                    )
+                else:
+                    await context.bot.copy_message(
                         chat_id=dump_id,
                         from_chat_id=it["chat_id"],
                         message_id=it["message_id"]
                     )
-                    sent_count += 1
+                sent_count += 1
 
+            except RetryAfter as e:
+                await asyncio.sleep(e.retry_after)
+                try:
                     if cap:
-                        try:
-                            await context.bot.edit_message_caption(
-                                chat_id=dump_id,
-                                message_id=m.message_id,
-                                caption=cap,
-                                parse_mode=constants.ParseMode.HTML
-                            )
-                        except:
-                            pass
+                        await context.bot.copy_message(
+                            chat_id=dump_id,
+                            from_chat_id=it["chat_id"],
+                            message_id=it["message_id"],
+                            caption=cap,
+                            parse_mode=constants.ParseMode.HTML
+                        )
+                    else:
+                        await context.bot.copy_message(
+                            chat_id=dump_id,
+                            from_chat_id=it["chat_id"],
+                            message_id=it["message_id"]
+                        )
+                    sent_count += 1
                 except:
                     pass
             except:
@@ -748,45 +743,40 @@ async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     last_group = cur_group
 
             try:
-                m = await context.bot.copy_message(
-                    chat_id=chat_id,
-                    from_chat_id=it["chat_id"],
-                    message_id=it["message_id"]
-                )
-                sent_count += 1
-
-                # ✅ Apply caption if possible
                 if cap:
-                    try:
-                        await context.bot.edit_message_caption(
-                            chat_id=chat_id,
-                            message_id=m.message_id,
-                            caption=cap,
-                            parse_mode=constants.ParseMode.HTML
-                        )
-                    except:
-                        pass
-
-            except RetryAfter as e:
-                await asyncio.sleep(e.retry_after)
-                try:
-                    m = await context.bot.copy_message(
+                    await context.bot.copy_message(
+                        chat_id=chat_id,
+                        from_chat_id=it["chat_id"],
+                        message_id=it["message_id"],
+                        caption=cap,
+                        parse_mode=constants.ParseMode.HTML
+                    )
+                else:
+                    await context.bot.copy_message(
                         chat_id=chat_id,
                         from_chat_id=it["chat_id"],
                         message_id=it["message_id"]
                     )
-                    sent_count += 1
+                sent_count += 1    
 
+            except RetryAfter as e:
+                await asyncio.sleep(e.retry_after)
+                try:
                     if cap:
-                        try:
-                            await context.bot.edit_message_caption(
-                                chat_id=chat_id,
-                                message_id=m.message_id,
-                                caption=cap,
-                                parse_mode=constants.ParseMode.HTML
-                            )
-                        except:
-                            pass
+                        await context.bot.copy_message(
+                            chat_id=chat_id,
+                            from_chat_id=it["chat_id"],
+                            message_id=it["message_id"],
+                            caption=cap,
+                            parse_mode=constants.ParseMode.HTML
+                        )
+                    else:
+                        await context.bot.copy_message(
+                            chat_id=chat_id,
+                            from_chat_id=it["chat_id"],
+                            message_id=it["message_id"]
+                        )
+                    sent_count += 1    
                 except:
                     pass
             except:

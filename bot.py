@@ -208,7 +208,7 @@ def extract_filename_from_meta(meta: str) -> str:
     # best-effort: return first long-ish token or full meta
     return (meta or "").strip()[:200] or "File"
 
-def build_caption(template: str | None, meta: str) -> str | None:
+def build_caption(template: str | None, meta: str, is_document: bool=False) -> str | None:
     if not template:
         return None
 

@@ -221,8 +221,15 @@ def build_caption(template: str | None, meta: str) -> str | None:
     out = out.replace("{episode}", str(ep) if ep is not None else "")
     out = out.replace("{quality}", q or "")
 
+    # ✅ Convert \n to real Telegram line break
+    out = out.replace("\\n", "\n")
+
     out = out.strip()
-    return out if out else None
+
+    if not out:
+        return None
+
+    return out
 
 def set_user_sticker(uid: int, sticker_id: str):
     stickers_col.update_one(
@@ -658,7 +665,8 @@ async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await context.bot.edit_message_caption(
                             chat_id=dump_id,
                             message_id=m.message_id,
-                            caption=cap
+                            caption=cap,
+                            parse_mode=constants.ParseMode.HTML
                         )
                     except:
                         pass
@@ -678,7 +686,8 @@ async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             await context.bot.edit_message_caption(
                                 chat_id=dump_id,
                                 message_id=m.message_id,
-                                caption=cap
+                                caption=cap,
+                                parse_mode=constants.ParseMode.HTML
                             )
                         except:
                             pass
@@ -752,7 +761,8 @@ async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await context.bot.edit_message_caption(
                             chat_id=chat_id,
                             message_id=m.message_id,
-                            caption=cap
+                            caption=cap,
+                            parse_mode=constants.ParseMode.HTML
                         )
                     except:
                         pass
@@ -772,7 +782,8 @@ async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             await context.bot.edit_message_caption(
                                 chat_id=chat_id,
                                 message_id=m.message_id,
-                                caption=cap
+                                caption=cap,
+                                parse_mode=constants.ParseMode.HTML
                             )
                         except:
                             pass
@@ -1024,19 +1035,64 @@ async def setcap_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not context.args:
         await update.message.reply_text(
-            "<b>Sᴇʟᴇᴄᴛ Fᴏʀᴍᴀᴛ Lɪᴋᴇ ᴛʜɪꜱ.</b>\n\n"
-            "<code>{file_name}</code> - Fɪʟᴇ ɴᴀᴍᴇ\n"
-            "<code>{episode}</code> - Eᴘɪꜱᴏᴅᴇ ɴᴜᴍʙᴇʀ\n"
-            "<code>{quality}</code> - Qᴜᴀʟɪᴛʏ",
+            "<b>Now Supports Advanced HTML Styling!</b>\n\n"
+            "<b>Available Variables:</b>\n"
+            "<code>{file_name}</code>\n"
+            "<code>{episode}</code>\n"
+            "<code>{quality}</code>\n\n"
+            "<b>Supported Tags:</b>\n"
+            "<blockquote>"
+            "&lt;b&gt;Bold&lt;/b&gt;\n"
+            "&lt;i&gt;Italic&lt;/i&gt;\n"
+            "&lt;u&gt;Underline&lt;/u&gt;\n"
+            "&lt;s&gt;Strike&lt;/s&gt;\n"
+            "&lt;code&gt;Code&lt;/code&gt;\n"
+            "&lt;pre&gt;Pre&lt;/pre&gt;\n"
+            "&lt;blockquote&gt;Quote&lt;/blockquote&gt;\n"
+            "&lt;blockquote expandable&gt;Expandable&lt;/blockquote&gt;"
+            "</blockquote>\n\n"
+            "<b>Use \\n for New Line</b>\n\n"
+            "<b>Example:</b>\n"
+            "<code>/setcap &lt;b&gt;{file_name}&lt;/b&gt;\\nEpisode: {episode}</code>",
             parse_mode=constants.ParseMode.HTML
         )
         return
 
-    template = " ".join(context.args).strip()
+    template = " ".join(context.args)
+
+    # ✅ convert \n to real linebreak before preview & saving
+    template = template.replace("\\n", "\n").strip()
+
+    # ---------- PREVIEW TEST ----------
+    # fake sample preview values
+    preview = template
+    preview = preview.replace("{file_name}", "Naruto_Ep01.mkv")
+    preview = preview.replace("{episode}", "01")
+    preview = preview.replace("{quality}", "1080p")
+
+    try:
+        # try sending preview to detect broken HTML
+        test = await update.message.reply_text(
+            "<b>Caption Preview:</b>\n\n" + preview,
+            parse_mode=constants.ParseMode.HTML
+        )
+        await test.delete()
+    except Exception as e:
+        await update.message.reply_text(
+            "<b>Invalid HTML detected!</b>\n"
+            "Please check your tags and try again.\n\n"
+            "<blockquote>Example:\n"
+            "&lt;b&gt;Episode {episode}&lt;/b&gt;</blockquote>",
+            parse_mode=constants.ParseMode.HTML
+        )
+        return
+
+    # ---------- SAVE ----------
     set_user_caption(uid, template)
 
     await update.message.reply_text(
-        "Yᴏᴜʀ ᴄᴀᴘᴛɪᴏɴ ʜᴀꜱ ʙᴇᴇɴ ꜱᴀᴠᴇᴅ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ!!",
+        "<b>Your Caption Has Been Saved Successfully!</b>\n\n"
+        "<b>Preview:</b>\n\n" + preview,
         parse_mode=constants.ParseMode.HTML
     )
 

@@ -29,11 +29,11 @@ from pymongo import MongoClient
 
 #=========== configurations ===========
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8411778153:AAG4yI8fjrMJkGLn4KQ4oVciSkVW0D3KuDk")
-PHOTO_MAIN = "AgACAgUAAxkBAAMGaXOk8L4z6FfrXhXclo3L3tDVrm4AAnwOaxvkYqBXleYmmn3KS18ACAEAAwIAA3kABx4E"
-PHOTO_HELP = "AgACAgUAAxkBAAMCaXOk4gUGDrU91EzVev2vIznOHpQAAlgOaxvkYqBX6rf8QmqmOiEACAEAAwIAA3gABx4E"
-RESTART_PHOTO_ID = "AgACAgUAAxkBAAMEaXOk6B0-7bpeZNheu1ejAVzjls4AAnkOaxvkYqBXhV3VNL3euyAACAEAAwIAA3kABx4E"
-PHOTO_STATUS = "AgACAgUAAxkBAAMFaXOk7FSbWYk9gEVhfZdZL0wUU7cAAnsOaxvkYqBXlJN8BHerHYMACAEAAwIAA3kABx4E"
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8704095477:AAFBwS3K13kyLX6mObkJfUFOqNew-mH0vZg")
+PHOTO_MAIN = "https://i.ibb.co/20BJRpRp/image.png"
+PHOTO_HELP = "https://i.ibb.co/LXyXRVp6/656002.jpg"
+RESTART_PHOTO_ID = "https://i.ibb.co/gbXCJDZy/download-73.jpg"
+PHOTO_STATUS = "https://i.ibb.co/kgpzHjHb/download-71.jpg"
 OWNER_ID = int(os.getenv("OWNER_ID", "7816936715"))
 MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://ANI_OTAKU:ANI_OTAKU@cluster0.t3frstc.mongodb.net/?appName=Cluster0")
 DB_NAME = os.getenv("DB_NAME", "RIN_FILE_SEQUENCE_BOT")

@@ -34,7 +34,7 @@ PHOTO_MAIN = "https://i.ibb.co/21TbBYYb/download.jpg"
 PHOTO_HELP = "https://i.ibb.co/LXyXRVp6/656002.jpg"
 RESTART_PHOTO_ID = "https://i.ibb.co/gbXCJDZy/download-73.jpg"
 PHOTO_STATUS = "https://i.ibb.co/kgpzHjHb/download-71.jpg"
-OWNER_ID = int(os.getenv("OWNER_ID", "7816936715"))
+OWNER_ID = int(os.getenv("OWNER_ID", "7156099919"))
 MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://ANI_OTAKU:ANI_OTAKU@cluster0.t3frstc.mongodb.net/?appName=Cluster0")
 DB_NAME = os.getenv("DB_NAME", "RIN_FILE_SEQUENCE_BOT")
 

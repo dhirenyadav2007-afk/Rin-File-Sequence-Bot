@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+# by @ITsANIMEN from @BotifyX_Pro_Botz 
 import logging
 import asyncio
 import os
@@ -30,13 +30,23 @@ from pymongo import MongoClient
 #=========== configurations ===========
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8704095477:AAFBwS3K13kyLX6mObkJfUFOqNew-mH0vZg")
-PHOTO_MAIN = "https://i.ibb.co/21TbBYYb/download.jpg"
-PHOTO_HELP = "https://i.ibb.co/LXyXRVp6/656002.jpg"
-RESTART_PHOTO_ID = "https://i.ibb.co/gbXCJDZy/download-73.jpg"
-PHOTO_STATUS = "https://i.ibb.co/kgpzHjHb/download-71.jpg"
+PHOTO_MAIN = "https://i.ibb.co/SXVHsTvd/image.png"
+PHOTO_HELP = "https://i.ibb.co/cVzR2FC/image.png"
+RESTART_PHOTO_ID = "https://i.pinimg.com/236x/c1/e1/40/c1e1408ea4fa84116b6d9bbbc64d158b.jpg"
+PHOTO_STATUS = "https://i.ibb.co/MxmtQPHj/image.png"
 OWNER_ID = int(os.getenv("OWNER_ID", "7156099919"))
 MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://ANI_OTAKU:ANI_OTAKU@cluster0.t3frstc.mongodb.net/?appName=Cluster0")
 DB_NAME = os.getenv("DB_NAME", "RIN_FILE_SEQUENCE_BOT")
+
+# =========== FSUB CONFIG ===========
+FSUB_CHANNELS = ["-1003961168067", "-1003865044362"]   # add as many as needed
+FSUB_PIC = "https://i.pinimg.com/1200x/0b/a4/c8/0ba4c8fb89645bff33110467100a8a17.jpg"                                            # photo URL or file_id
+FSUB_CAPTION = (
+    "<tg-emoji emoji-id='5420323339723881652'>⚠️</tg-emoji> "
+    "<b>Yᴏᴜ Mᴜsᴛ Jᴏɪɴ Oᴜʀ Cʜᴀɴɴᴇʟ(s) Tᴏ Usᴇ Tʜɪs Bᴏᴛ!</b>\n\n"
+    "<blockquote><tg-emoji emoji-id='5397782960512444700'>📌</tg-emoji> Pʟᴇᴀsᴇ ᴊᴏɪɴ ᴀʟʟ ᴛʜᴇ ᴄʜᴀɴɴᴇʟs ʙᴇʟᴏᴡ ᴀɴᴅ "
+    "ᴛᴀᴘ <b>Try Again</b> ᴛᴏ ᴄᴏɴᴛɪɴᴜᴇ.</blockquote>"
+)
 
 mongo = MongoClient(MONGO_URI)
 db = mongo[DB_NAME]
@@ -159,6 +169,80 @@ def save_user_to_db(user):
         upsert=True
     )
 
+async def check_fsub(bot, user_id: int) -> list[dict]:
+    """
+    Returns list of channels the user has NOT joined.
+    Each item: {"id": chat_id, "title": str, "invite_link": str}
+    """
+    not_joined = []
+    for ch in FSUB_CHANNELS:
+        try:
+            member = await bot.get_chat_member(chat_id=ch, user_id=user_id)
+            if member.status in ("left", "kicked", "banned"):
+                raise Exception("not member")
+        except:
+            # fetch invite link / title
+            try:
+                chat = await bot.get_chat(ch)
+                title = chat.title or "Channel"
+                if chat.username:
+                    link = f"https://t.me/{chat.username}"
+                else:
+                    link_obj = await bot.export_chat_invite_link(ch)
+                    link = link_obj
+            except:
+                title = "Channel"
+                link = "#"
+            not_joined.append({"id": ch, "title": title, "invite_link": link})
+    return not_joined
+
+
+def fsub_keyboard(not_joined: list[dict], user_id: int) -> InlineKeyboardMarkup:
+    rows = []
+    for ch in not_joined:
+        rows.append([InlineKeyboardButton(f"{ch['title']}", url=ch["invite_link"])])
+    rows.append([InlineKeyboardButton("Try Again", callback_data=f"fsub_check:{user_id}")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def send_fsub_message(update_or_query, bot, not_joined: list[dict], user_id: int):
+    """Send the fsub photo+caption. Works from both Message and CallbackQuery."""
+    kb = fsub_keyboard(not_joined, user_id)
+
+    # called from a CallbackQuery (Try Again button)
+    if hasattr(update_or_query, "edit_message_media"):
+        try:
+            if FSUB_PIC:
+                await update_or_query.edit_message_media(
+                    media=InputMediaPhoto(media=FSUB_PIC, caption=FSUB_CAPTION,
+                                         parse_mode=constants.ParseMode.HTML),
+                    reply_markup=kb
+                )
+            else:
+                await update_or_query.edit_message_text(
+                    text=FSUB_CAPTION,
+                    parse_mode=constants.ParseMode.HTML,
+                    reply_markup=kb
+                )
+        except:
+            pass
+        return
+
+    # called from a regular Message
+    if FSUB_PIC:
+        await update_or_query.reply_photo(
+            photo=FSUB_PIC,
+            caption=FSUB_CAPTION,
+            reply_markup=kb,
+            parse_mode=constants.ParseMode.HTML
+        )
+    else:
+        await update_or_query.reply_text(
+            text=FSUB_CAPTION,
+            reply_markup=kb,
+            parse_mode=constants.ParseMode.HTML
+        )
+
 def get_total_users() -> int:
     return users_col.count_documents({})
 
@@ -208,7 +292,8 @@ def extract_filename_from_meta(meta: str) -> str:
     # best-effort: return first long-ish token or full meta
     return (meta or "").strip()[:200] or "File"
 
-def build_caption(template: str | None, meta: str, is_document: bool=False) -> str | None:
+# ✅ {file_name} now works for ALL file types (document, video, audio, photo)
+def build_caption(template: str | None, meta: str) -> str | None:
     if not template:
         return None
 
@@ -217,11 +302,7 @@ def build_caption(template: str | None, meta: str, is_document: bool=False) -> s
     fname = extract_filename_from_meta(meta)
 
     out = template
-    # 🔥 remove filename for documents only
-    if is_document:
-        out = out.replace("{file_name}", "")
-    else:
-        out = out.replace("{file_name}", fname)
+    out = out.replace("{file_name}", fname)
     out = out.replace("{episode}", str(ep) if ep is not None else "")
     out = out.replace("{quality}", q or "")
 
@@ -267,31 +348,31 @@ def mention_clickable(user_id: int, first_name: str, username: str) -> str:
 def leaderboard_keyboard(active: str) -> InlineKeyboardMarkup:
     # active: "today"|"week"|"month"|"all"
     def btn(text, key):
-        label = f"• {text} •" if key == active else text
+        label = f"✅ {text}" if key == active else text
         return InlineKeyboardButton(label, callback_data=f"lb:{key}")
 
     return InlineKeyboardMarkup([
         [btn("Today", "today"), btn("Weekly", "week")],
         [btn("Monthly", "month"), btn("All Time", "all")],
-        [InlineKeyboardButton("✗ ƈʅσʂҽ ✗", callback_data="close_msg")]
+        [InlineKeyboardButton("ƈʅσʂҽ", callback_data="close_msg")]
     ])
 
 def leaderboard_title(active: str) -> str:
     return {
-        "today": "📈 LEADERBOARD: TODAY",
-        "week":  "📈 LEADERBOARD: WEEKLY",
-        "month": "📈 LEADERBOARD: MONTHLY",
-        "all":   "📈 LEADERBOARD: ALL TIME"
-    }.get(active, "📈 LEADERBOARD: TODAY")
+        "today": "<tg-emoji emoji-id='5244837092042750681'>📈</tg-emoji> LEADERBOARD: TODAY",
+        "week":  "<tg-emoji emoji-id='5244837092042750681'>📈</tg-emoji> LEADERBOARD: WEEKLY",
+        "month": "<tg-emoji emoji-id='5244837092042750681'>📈</tg-emoji> LEADERBOARD: MONTHLY",
+        "all":   "<tg-emoji emoji-id='5244837092042750681'>📈</tg-emoji> LEADERBOARD: ALL TIME"
+    }.get(active, "<tg-emoji emoji-id='5244837092042750681'>📈</tg-emoji> LEADERBOARD: TODAY")
 
 def build_leaderboard_text(active: str, rows: list[dict], total_sorted: int) -> str:
     # rows: list of docs from Mongo, already sorted descending
     lines = []
     lines.append(f"<b>{leaderboard_title(active)}</b>\n")
-    lines.append("<b>Top 20 Users With Most Files Sorted:</b>\n")
+    lines.append("<b><tg-emoji emoji-id='5415655814079723871'>🔝</tg-emoji> Top 20 Users With Most Files Sorted:</b>\n")
 
     if not rows:
-        lines.append("<blockquote>No data yet.</blockquote>\n")
+        lines.append("<blockquote><tg-emoji emoji-id='5210952531676504517'>❌</tg-emoji> No data yet.</blockquote>\n")
     else:
         for i, doc in enumerate(rows, start=1):
             uid = doc["_id"]
@@ -309,9 +390,9 @@ def build_leaderboard_text(active: str, rows: list[dict], total_sorted: int) -> 
                 c = int(doc.get("all_time", 0))
 
             # style like your screenshot: « Name » 123
-            lines.append(f"👤 « {name} » <b>{c}</b>")
+            lines.append(f"<tg-emoji emoji-id='5258486128742244085'>👥</tg-emoji> « {name} » <b>{c}</b>")
 
-    lines.append(f"\n<b>Total Sorted Files:</b> <code>{int(total_sorted)}</code>")
+    lines.append(f"\n<b><tg-emoji emoji-id='5224607267797606837'>☄️</tg-emoji> Total Sorted Files:</b> <code>{int(total_sorted)}</code>")
     return "\n".join(lines)
 
 def get_leaderboard_rows(active: str, now: datetime, limit: int = 20) -> list[dict]:
@@ -496,12 +577,13 @@ def set_user_smode(uid: int, mode: str):
         mode = "default"
     smodes_col.update_one({"_id": uid}, {"$set": {"mode": mode}}, upsert=True)
 
-# ---------- KEYBOARDS ----------
+# ---------- KEYBOARDS (with color buttons & premium emoji labels) ----------
+
 def start_keyboard():
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("ԋҽʅρ", callback_data="help_text"),
+                InlineKeyboardButton("ʜҽʅρ", callback_data="help_text"),
                 InlineKeyboardButton("Dҽʋҽʅσρҽɾ", url="https://t.me/ITSANIMEN")
             ],
             [
@@ -514,41 +596,50 @@ def help_keyboard():
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✗ Ⴆαƈƙ ✗", callback_data="back_to_start"),
-                InlineKeyboardButton("✗ ƈʅσʂҽ ✗", callback_data="close_msg")
+                InlineKeyboardButton("Ⴆαƈƙ", callback_data="back_to_start"),
+                InlineKeyboardButton("ƈʅσʂҽ", callback_data="close_msg")
             ]
         ]
     )
 
-# ✅ add keyboard
 def status_keyboard():
-    return InlineKeyboardMarkup([[InlineKeyboardButton("✗ ƈʅσʂҽ ✗", callback_data="close_msg")]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton("✖️ ƈʅσʂҽ", callback_data="close_msg")]])
 
 def smode_keyboard(cur: str) -> InlineKeyboardMarkup:
     def label(name: str, key: str) -> str:
-        return f"✓ {name}" if key == cur else name
+        return f"✅ {name}" if key == cur else name
 
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(label("Quality", "quality"), callback_data="smode:quality"),
             InlineKeyboardButton(label("Default", "default"), callback_data="smode:default"),
         ],
-        [InlineKeyboardButton("✗ ƈʅσʂҽ ✗", callback_data="close_msg")]
+        [InlineKeyboardButton("ƈʅσʂҽ", callback_data="close_msg")]
     ])
 
 # ---------- START ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_user_to_db(update.effective_user)
+    uid = update.effective_user.id
+    # --- FSUB GATE ---
+    if FSUB_CHANNELS:
+        not_joined = await check_fsub(context.bot, uid)
+        if not_joined:
+            await send_fsub_message(update.message, context.bot, not_joined, uid)
+            return
 
     await update.message.reply_photo(
         photo=PHOTO_MAIN,
         caption=(
-            "<blockquote>Wᴇʟᴄᴏᴍᴇ ᴛᴏ ʏᴏᴜʀ ᴀʟʟ-ɪɴ-ᴏɴᴇ Fɪʟᴇ Mᴀɴᴀɢᴇᴍᴇɴᴛ Assɪsᴛᴀɴᴛ! 📂✨</blockquote>\n\n"
-            "<blockquote>Eᴀsɪʟʏ ᴍᴀɴᴀɢᴇ, ᴏʀɢᴀɴɪᴢᴇ, ᴀɴᴅ sʜᴀʀᴇ ʏᴏᴜʀ ꜰɪʟᴇs ᴡɪᴛʜᴏᴜᴛ ᴀɴʏ \n"
+            "<blockquote>"
+            "<tg-emoji emoji-id='6296577138615125756'>✅</tg-emoji> "
+            "Wᴇʟᴄᴏᴍᴇ ᴛᴏ ʏᴏᴜʀ ᴀʟʟ-ɪɴ-ᴏɴᴇ Fɪʟᴇ Mᴀɴᴀɢᴇᴍᴇɴᴛ Assɪsᴛᴀɴᴛ! <tg-emoji emoji-id='5794323465452394551'>🎚</tg-emoji>"
+            "</blockquote>\n\n"
+            "<blockquote><tg-emoji emoji-id='5793936020747589223'>✅</tg-emoji> Eᴀsɪʟʏ ᴍᴀɴᴀɢᴇ, ᴏʀɢᴀɴɪᴢᴇ, ᴀɴᴅ sʜᴀʀᴇ ʏᴏᴜʀ ꜰɪʟᴇs ᴡɪᴛʜᴏᴜᴛ ᴀɴʏ \n"
             "ʜᴀssʟᴇ. Sᴀʏ ɢᴏᴏᴅʙʏᴇ ᴛᴏ ᴍᴇssʏ ꜰɪʟᴇ ɴᴀᴍᴇs ᴀɴᴅ ᴄᴏɴꜰᴜsɪɴɢ \n"
-            "ʀᴇsᴏʟᴜᴛɪᴏɴs – ᴡᴇ’ᴠᴇ ɢᴏᴛ ʏᴏᴜ ᴄᴏᴠᴇʀᴇᴅ!</blockquote>\n\n"
-            "<blockquote><b>➥ MAINTAINED BY : "
-            "<a href='https://t.me/ITSANIMEN'>彡 ΔNI_OTΔKU 彡</a>"
+            "ʀᴇsᴏʟᴜᴛɪᴏɴs <tg-emoji emoji-id='6255512604110751681'>🔻</tg-emoji> ᴡᴇ'ᴠᴇ ɢᴏᴛ ʏᴏᴜ ᴄᴏᴠᴇʀᴇᴅ! <tg-emoji emoji-id='5789527674904906989'>🥜</tg-emoji></blockquote>\n\n"
+            "<blockquote><b><tg-emoji emoji-id='5213297128553590938'>➡️</tg-emoji> MAINTAINED BY <tg-emoji emoji-id='5212954622091603940'>❤️</tg-emoji> "
+            "<a href='https://t.me/ITSANIMEN'>彡 ΔNI_OTΔKU 彡</a> <tg-emoji emoji-id='5796642129316943457'>⭐️</tg-emoji>"
             "</b></blockquote>"
         ),
         reply_markup=start_keyboard(),
@@ -559,6 +650,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     chat_id = update.effective_chat.id
+    # --- FSUB GATE ---
+    if FSUB_CHANNELS:
+        not_joined = await check_fsub(context.bot, uid)
+        if not_joined:
+            await send_fsub_message(update.message, context.bot, not_joined, uid)
+            return
 
     data = USER_QUEUE.get(uid, {"files": [], "queue_msgs": []})
     files = data.get("files", [])
@@ -567,7 +664,7 @@ async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total = len(files)
     if total == 0:
         await update.message.reply_text(
-            "<b>Your queue is empty. Please add files first.</b>",
+            "<blockquote><tg-emoji emoji-id='5210952531676504517'>❌</tg-emoji> Your queue is empty. Please add files first.</blockquote>",
             parse_mode=constants.ParseMode.HTML
         )
         return
@@ -640,8 +737,8 @@ async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         last_group = None
 
         for it in sorted_items:
-            is_doc = ".pdf" in (it.get("meta","").lower())
-            cap = build_caption(template, it.get("meta", ""), is_doc)  # ✅ build caption per file
+            # ✅ {file_name} works for ALL file types
+            cap = build_caption(template, it.get("meta", ""))
 
             cur_group = _q_group(it.get("meta", "")) if can_quality_sticker else None
 
@@ -722,7 +819,7 @@ async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
 
         await update.message.reply_text(
-            "Fɪʟᴇꜱ Sᴏʀᴛᴇᴅ 🎉",
+            "<blockquote><tg-emoji emoji-id='5206607081334906820'>✔️</tg-emoji> <b>Fɪʟᴇꜱ Sᴏʀᴛᴇᴅ 🎉</b></blockquote>",
             parse_mode=constants.ParseMode.HTML
         )
 
@@ -732,8 +829,8 @@ async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         last_group = None
 
         for it in sorted_items:
-            is_doc = ".pdf" in (it.get("meta","").lower())
-            cap = build_caption(template, it.get("meta", ""), is_doc)  # ✅ build caption per file
+            # ✅ {file_name} works for ALL file types
+            cap = build_caption(template, it.get("meta", ""))
 
             cur_group = _q_group(it.get("meta", "")) if can_quality_sticker else None
 
@@ -810,9 +907,9 @@ async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         time_taken = (datetime.now() - start_time).total_seconds()
 
         await update.message.reply_text(
-            f"Fɪʟᴇꜱ Sᴏʀᴛᴇᴅ {sent_count}/{total}\n"
-            f"Mᴏᴅᴇ: {mode}\n"
-            f"Tɪᴍᴇ Tᴀᴋᴇɴ: {fmt_timedelta(time_taken)}",
+            f"<blockquote><tg-emoji emoji-id='5206607081334906820'>✔️</tg-emoji> <b>Fɪʟᴇꜱ Sᴏʀᴛᴇᴅ {sent_count}/{total}</b></blockquote>\n"
+            f"<b>Mode:</b> {mode}\n"
+            f"<b>Time Taken:</b> {fmt_timedelta(time_taken)}",
             parse_mode=constants.ParseMode.HTML
         )
 
@@ -847,13 +944,19 @@ async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def clear_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     chat_id = update.effective_chat.id
+    # --- FSUB GATE ---
+    if FSUB_CHANNELS:
+        not_joined = await check_fsub(context.bot, uid)
+        if not_joined:
+            await send_fsub_message(update.message, context.bot, not_joined, uid)
+            return
 
     data = USER_QUEUE.get(uid)
 
     # no user data or no files
     if not data or (not data.get("files") and not data.get("queue_msgs")):
         await update.message.reply_text(
-            "Yᴏᴜʀ ꜰɪʟᴇ qᴜᴇᴜᴇ ɪꜱ ᴀʟʀᴇᴀᴅʏ ᴇᴍᴘᴛʏ.",
+            "<blockquote><tg-emoji emoji-id='5210952531676504517'>❌</tg-emoji> <b>Your file queue is already empty.</b></blockquote>",
             parse_mode=constants.ParseMode.HTML
         )
         return
@@ -879,7 +982,7 @@ async def clear_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     USER_QUEUE[uid] = {"files": [], "queue_msgs": []}
 
     await update.message.reply_text(
-        "Yᴏᴜʀ ꜰɪʟᴇ qᴜᴇᴜᴇ ʜᴀꜱ ʙᴇᴇɴ ᴄʟᴇᴀʀᴇᴅ.",
+        "<blockquote><tg-emoji emoji-id='5206607081334906820'>✔️</tg-emoji> <b>Your file queue has been cleared.</b></blockquote>",
         parse_mode=constants.ParseMode.HTML
     )
 
@@ -905,11 +1008,11 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total_users = users_col.count_documents({})
 
     caption = (
-        "<b>🤖 BOT STATUS</b>\n\n"
-        f"⏱ <b>Uptime:</b> <code>{fmt_timedelta(uptime_seconds)}</code>\n"
-        f"♻️ <b>Last Restarted:</b> <code>{last_restarted_str} UTC</code>\n"
-        f"👥 <b>Total Users:</b> <code>{total_users}</code>\n"
-        f"📂 <b>Total Files Sorted:</b> <code>{total_sorted}</code>\n"
+        "<tg-emoji emoji-id='5796189499893487111'>⚙️</tg-emoji> <b>BOT STATUS</b>\n\n"
+        f"<tg-emoji emoji-id='5264919878082509254'>▶️</tg-emoji> <b>Uptime:</b> <code>{fmt_timedelta(uptime_seconds)}</code>\n"
+        f"<tg-emoji emoji-id='5210956306952758910'>👀</tg-emoji> <b>Last Restarted:</b> <code>{last_restarted_str}</code>\n"
+        f"<tg-emoji emoji-id='5397782960512444700'>📌</tg-emoji> <b>Total Users:</b> <code>{total_users}</code>\n"
+        f"<tg-emoji emoji-id='5282843764451195532'>🖥</tg-emoji> <b>Total Files Sorted:</b> <code>{total_sorted}</code>\n"
     )
 
     await update.message.reply_photo(
@@ -929,8 +1032,8 @@ async def setdump_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             dump_id = int(context.args[0])
             set_user_dump(uid, dump_id)
             await update.message.reply_text(
-                f"Dᴜᴍᴘ Cʜᴀɴɴᴇʟ Aᴅᴅᴇᴅ: <code>{dump_id}</code>\n\n"
-                "Yᴏᴜʀ Fɪʟᴇs Wɪʟʟ Nᴏᴡ Bᴇ Sᴇɴᴛ Tᴏ Tʜᴇ Sᴇʟᴇᴄᴛᴇᴅ Cʜᴀɴɴᴇʟ.",
+                f"<blockquote><tg-emoji emoji-id='5206607081334906820'>✔️</tg-emoji> <b>Dump Channel Added:</b> <code>{dump_id}</code>\n"
+                "Yᴏᴜʀ Fɪʟᴇs Wɪʟʟ Nᴏᴡ Bᴇ Sᴇɴᴛ Tᴏ Tʜᴇ Sᴇʟᴇᴄᴛᴇᴅ Cʜᴀɴɴᴇʟ.</blockquote>",
                 parse_mode=constants.ParseMode.HTML
             )
             return
@@ -951,8 +1054,8 @@ async def setdump_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if ch_id:
             set_user_dump(uid, int(ch_id))
             await update.message.reply_text(
-                f"Dᴜᴍᴘ Cʜᴀɴɴᴇʟ Aᴅᴅᴇᴅ: <code>{ch_id}</code>\n\n"
-                "Yᴏᴜʀ Fɪʟᴇs Wɪʟʟ Nᴏᴡ Bᴇ Sᴇɴᴛ Tᴏ Tʜᴇ Sᴇʟᴇᴄᴛᴇᴅ Cʜᴀɴɴᴇʟ.",
+                f"<blockquote><tg-emoji emoji-id='5206607081334906820'>✔️</tg-emoji> <b>Dump Channel Added:</b> <code>{ch_id}</code>\n"
+                "Yᴏᴜʀ Fɪʟᴇs Wɪʟʟ Nᴏᴡ Bᴇ Sᴇɴᴛ Tᴏ Tʜᴇ Sᴇʟᴇᴄᴛᴇᴅ Cʜᴀɴɴᴇʟ.</blockquote>",
                 parse_mode=constants.ParseMode.HTML
             )
             return
@@ -960,8 +1063,8 @@ async def setdump_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Otherwise show instruction + set wait mode
     SETDUMP_WAIT.add(uid)
     await update.message.reply_text(
-        "Pʟᴇᴀꜱᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴄʜᴀɴɴᴇʟ ID ᴀꜱ ᴀ ᴘᴀʀᴀᴍᴇᴛᴇʀ (e.g., /setdump -1001234567890) "
-        "ᴏʀ ᴛᴏ ꜰᴏʀᴡᴀʀᴅᴇᴅ ᴍᴇꜱꜱᴀɢᴇ ꜰʀᴏᴍ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ.",
+        "<blockquote><tg-emoji emoji-id='5210956306952758910'>👀</tg-emoji> <b>Please provide a channel ID as a parameter (e.g., /setdump -1001234567890) </b>\n"
+        "or reply to a forwarded message from the channel.</blockquote>",
         parse_mode=constants.ParseMode.HTML
     )
 
@@ -972,7 +1075,8 @@ async def getdump_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dump_id = get_user_dump(uid)
     if not dump_id:
         await update.message.reply_text(
-            "Yᴏᴜ ʜᴀᴠᴇ ɴᴏᴛ sᴇᴛ ᴀ Dᴜᴍᴘ Cʜᴀɴɴᴇʟ. Please set one using /setdump.",
+            "<blockquote><tg-emoji emoji-id='5210952531676504517'>❌</tg-emoji> <b>No Dump Channel Set.</b>\n"
+            "Please set one using /setdump.</blockquote>",
             parse_mode=constants.ParseMode.HTML
         )
         return
@@ -995,9 +1099,9 @@ async def getdump_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         channel_line = f"<b>{title}</b>"
 
     await update.message.reply_text(
-        "Yᴏᴜʀ Dᴜᴍᴘ Cʜᴀɴɴᴇʟ:\n\n"
+        "<blockquote><tg-emoji emoji-id='5224607267797606837'>☄️</tg-emoji> Your Dᴜᴍᴘ Cʜᴀɴɴᴇʟ:\n\n"
         f"{channel_line}\n"
-        f"<code>{dump_id}</code>",
+        f"<code>{dump_id}</code></blockquote>",
         parse_mode=constants.ParseMode.HTML,
         disable_web_page_preview=True
     )
@@ -1009,7 +1113,8 @@ async def deldump_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dump_id = get_user_dump(uid)
     if not dump_id:
         await update.message.reply_text(
-            "You don't have a dump channel set. Please set one using /setdump.",
+            "<blockquote><tg-emoji emoji-id='5210952531676504517'>❌</tg-emoji> <b>No Dump Channel Set.</b>\n"
+            "Please set one using /setdump.</blockquote>",
             parse_mode=constants.ParseMode.HTML
         )
         return
@@ -1021,22 +1126,23 @@ async def deldump_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
     await update.message.reply_text(
-        "Dᴜᴍᴘ Cʜᴀɴɴᴇʟ Dᴇʟᴇᴛᴇᴅ.\n\n"
-        "Pʟᴇᴀsᴇ Sᴇᴛ A Nᴇᴡ Oɴᴇ ᴜsɪɴɢ /setdump.",
+        "<blockquote><tg-emoji emoji-id='5206607081334906820'>✔️</tg-emoji> <b>Dump Channel Deleted.</b>\n"
+        "Please set a new one using /setdump.</blockquote>",
         parse_mode=constants.ParseMode.HTML
     )
+
 # ---------- SETCAP ----------
 async def setcap_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
 
     if not context.args:
         await update.message.reply_text(
-            "<b>Now Supports Advanced HTML Styling!</b>\n\n"
-            "<b>Available Variables:</b>\n"
-            "<code>{file_name}</code>\n"
-            "<code>{episode}</code>\n"
-            "<code>{quality}</code>\n\n"
-            "<b>Supported Tags:</b>\n"
+            "<b><tg-emoji emoji-id='5224607267797606837'>☄️</tg-emoji> Now Supports Advanced HTML Styling!</b>\n\n"
+            "<b><tg-emoji emoji-id='5210956306952758910'>👀</tg-emoji> Available Variables:</b>\n"
+            "<tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> <code>{file_name}</code> File name\n"
+            "<tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> <code>{episode}</code> Episode number\n"
+            "<tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> <code>{quality}</code> Quality\n\n"
+            "<b><tg-emoji emoji-id='5210956306952758910'>👀</tg-emoji> Supported Tags:</b>\n"
             "<blockquote>"
             "&lt;b&gt;Bold&lt;/b&gt;\n"
             "&lt;i&gt;Italic&lt;/i&gt;\n"
@@ -1047,8 +1153,8 @@ async def setcap_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "&lt;blockquote&gt;Quote&lt;/blockquote&gt;\n"
             "&lt;blockquote expandable&gt;Expandable&lt;/blockquote&gt;"
             "</blockquote>\n\n"
-            "<b>Use \\n for New Line</b>\n\n"
-            "<b>Example:</b>\n"
+            "<b><tg-emoji emoji-id='5420323339723881652'>⚠️</tg-emoji> Use \\n for New Line</b>\n\n"
+            "<b><tg-emoji emoji-id='5210956306952758910'>👀</tg-emoji> Example:</b>\n"
             "<code>/setcap &lt;b&gt;{file_name}&lt;/b&gt;\\nEpisode: {episode}</code>",
             parse_mode=constants.ParseMode.HTML
         )
@@ -1075,7 +1181,7 @@ async def setcap_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await test.delete()
     except Exception as e:
         await update.message.reply_text(
-            "<b>Invalid HTML detected!</b>\n"
+            "<blockquote><tg-emoji emoji-id='5210952531676504517'>❌</tg-emoji> <b>Invalid HTML detected!</b>\n"
             "Please check your tags and try again.\n\n"
             "<blockquote>Example:\n"
             "&lt;b&gt;Episode {episode}&lt;/b&gt;</blockquote>",
@@ -1087,7 +1193,7 @@ async def setcap_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     set_user_caption(uid, template)
 
     await update.message.reply_text(
-        "<b>Your Caption Has Been Saved Successfully!</b>\n\n"
+        "<blockquote><tg-emoji emoji-id='5206607081334906820'>✔️</tg-emoji> <b>Your Caption Has Been Saved Successfully!</b>\n\n"
         "<b>Preview:</b>\n\n" + preview,
         parse_mode=constants.ParseMode.HTML
     )
@@ -1100,15 +1206,15 @@ async def getcap_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not template:
         await update.message.reply_text(
-            "Yᴏᴜ ᴅᴏɴ'ᴛ ʜᴀᴠᴇ ᴀ ᴄᴜꜱᴛᴏᴍ ꜰᴏʀᴍᴀᴛ ꜱᴇᴛ.\n\n"
-            "Tʜᴇ ᴅᴇꜰᴀᴜʟᴛ ꜰᴏʀᴍᴀᴛ ᴡɪʟʟ ʙᴇ ᴜꜱᴇᴅ.",
+            "<blockquote><tg-emoji emoji-id='5210952531676504517'>❌</tg-emoji> Yᴏᴜ ᴅᴏɴ'ᴛ ʜᴀᴠᴇ ᴀ ᴄᴜꜱᴛᴏᴍ ꜰᴏʀᴍᴀᴛ ꜱᴇᴛ.\n\n"
+            "Tʜᴇ ᴅᴇꜰᴀᴜʟᴛ ꜰᴏʀᴍᴀᴛ ᴡɪʟʟ ʙᴇ ᴜꜱᴇᴅ.</blockquote>",
             parse_mode=constants.ParseMode.HTML
         )
         return
 
     await update.message.reply_text(
-        "Yᴏᴜʀ ᴄᴜʀʀᴇɴᴛ ꜰᴏʀᴍᴀᴛ ɪꜱ:\n\n"
-        f"<code>{template}</code>",
+        "<blockquote><tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> Yᴏᴜʀ ᴄᴜʀʀᴇɴᴛ ꜰᴏʀᴍᴀᴛ ɪꜱ:\n\n"
+        f"<code>{template}</code></blockquote>",
         parse_mode=constants.ParseMode.HTML
     )
 
@@ -1123,7 +1229,7 @@ async def resetcap_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
     await update.message.reply_text(
-        "Yᴏᴜʀ ᴄᴜꜱᴛᴏᴍ ꜰᴏʀᴍᴀᴛ ʜᴀꜱ ʙᴇᴇɴ ʀᴇꜱᴇᴛ ᴛᴏ ᴛʜᴇ ᴅᴇꜰᴀᴜʟᴛ ꜰᴏʀᴍᴀᴛ.",
+        "<blockquote><tg-emoji emoji-id='5206607081334906820'>✔️</tg-emoji> Yᴏᴜʀ ᴄᴜꜱᴛᴏᴍ ꜰᴏʀᴍᴀᴛ ʜᴀꜱ ʙᴇᴇɴ ʀᴇꜱᴇᴛ ᴛᴏ ᴛʜᴇ ᴅᴇꜰᴀᴜʟᴛ ꜰᴏʀᴍᴀᴛ.</blockquote>",
         parse_mode=constants.ParseMode.HTML
     )
 
@@ -1134,7 +1240,7 @@ async def setsticker_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # must be a reply to a sticker
     if not update.message.reply_to_message or not update.message.reply_to_message.sticker:
         await update.message.reply_text(
-            "Pʟᴇᴀꜱᴇ ʀᴇᴘʟʏ ᴛᴏ ᴀ ꜱᴛɪᴄᴋᴇʀ ᴛᴏ ꜱᴇᴛ ɪᴛ ᴀꜱ ʏᴏᴜʀ ᴄᴜꜱᴛᴏᴍ ꜱᴛɪᴄᴋᴇʀ.",
+            "<blockquote><tg-emoji emoji-id='5210952531676504517'>❌</tg-emoji> Pʟᴇᴀꜱᴇ ʀᴇᴘʟʏ ᴛᴏ ᴀ ꜱᴛɪᴄᴋᴇʀ ᴛᴏ ꜱᴇᴛ ɪᴛ ᴀꜱ ʏᴏᴜʀ ᴄᴜꜱᴛᴏᴍ ꜱᴛɪᴄᴋᴇʀ.</blockquote>",
             parse_mode=constants.ParseMode.HTML
         )
         return
@@ -1143,7 +1249,7 @@ async def setsticker_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     set_user_sticker(uid, sticker_id)
 
     await update.message.reply_text(
-        "✅ Yᴏᴜʀ ᴄᴜꜱᴛᴏᴍ ꜱᴛɪᴄᴋᴇʀ ʜᴀꜱ ʙᴇᴇɴ ꜱᴀᴠᴇᴅ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ.",
+        "<blockquote><tg-emoji emoji-id='5206607081334906820'>✔️</tg-emoji> Yᴏᴜʀ ᴄᴜꜱᴛᴏᴍ ꜱᴛɪᴄᴋᴇʀ ʜᴀꜱ ʙᴇᴇɴ ꜱᴀᴠᴇᴅ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ.</blockquote>",
         parse_mode=constants.ParseMode.HTML
     )
 
@@ -1154,7 +1260,7 @@ async def getsticker_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     st = get_user_sticker(uid)
     if not st:
         await update.message.reply_text(
-            "Yᴏᴜ ᴅᴏɴ'ᴛ ʜᴀᴠᴇ ᴀ ᴄᴜꜱᴛᴏᴍ ꜱᴛɪᴄᴋᴇʀ ꜱᴇᴛ.",
+            "<blockquote><tg-emoji emoji-id='5210952531676504517'>❌</tg-emoji> Yᴏᴜ ᴅᴏɴ'ᴛ ʜᴀᴠᴇ ᴀ ᴄᴜꜱᴛᴏᴍ ꜱᴛɪᴄᴋᴇʀ ꜱᴇᴛ.</blockquote>",
             parse_mode=constants.ParseMode.HTML
         )
         return
@@ -1175,7 +1281,7 @@ async def delsticker_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
     await update.message.reply_text(
-        "Yᴏᴜʀ ᴄᴜꜱᴛᴏᴍ ꜱᴛɪᴄᴋᴇʀ ʜᴀꜱ ʙᴇᴇɴ ᴅᴇʟᴇᴛᴇᴅ.",
+        "<blockquote><tg-emoji emoji-id='5206607081334906820'>✔️</tg-emoji> Yᴏᴜʀ ᴄᴜꜱᴛᴏᴍ ꜱᴛɪᴄᴋᴇʀ ʜᴀꜱ ʙᴇᴇɴ ᴅᴇʟᴇᴛᴇᴅ.</blockquote>",
         parse_mode=constants.ParseMode.HTML
     )
 
@@ -1206,7 +1312,7 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # must reply to a message
     if not update.message.reply_to_message:
         await update.message.reply_text(
-            "<blockquote>Reply to a message to broadcast it</blockquote>",
+            "<blockquote><tg-emoji emoji-id='5210952531676504517'>❌</tg-emoji> Reply to a message to broadcast it</blockquote>",
             parse_mode=constants.ParseMode.HTML
         )
         return
@@ -1251,7 +1357,7 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 failed += 1
 
     report = (
-        "Broadcast completed\n\n"
+        "<tg-emoji emoji-id='5206607081334906820'>✔️</tg-emoji> Broadcast completed\n\n"
         f"◇ Total Users: {total}\n"
         f"◇ Successful: {success}\n"
         f"◇ Blocked Users: {blocked}\n"
@@ -1271,12 +1377,13 @@ async def mode_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cur = get_user_mode(uid) or "episode"
 
     text = (
+        f"<tg-emoji emoji-id='6296577138615125756'>✅</tg-emoji> "
         f"<b>Select Sorting Mode (Current: {cur.capitalize()})</b>\n\n"
-        "<blockquote>• Quality: Sort by quality then episode\n"
-        "• Title: Sort by title then episode\n"
-        "• Both: Sort by title, quality, then episode\n"
-        "• Episode: Default sorting by episode only\n"
-        "• Season: Sort by season, then quality, then episode</blockquote>"
+        "<blockquote>• <tg-emoji emoji-id='5794353925360457382'>⚙️</tg-emoji> Quality: Sort by quality then episode\n"
+        "• <tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> Title: Sort by title then episode\n"
+        "• <tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> Both: Sort by title, quality, then episode\n"
+        "• <tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> Episode: Default sorting by episode only\n"
+        "• <tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> Season: Sort by season, then quality, then episode</blockquote>"
     )
 
     await update.message.reply_text(
@@ -1288,7 +1395,7 @@ async def mode_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def mode_keyboard(cur: str) -> InlineKeyboardMarkup:
     def label(name: str, key: str) -> str:
-        return f"✓ {name}" if key == cur else name
+        return f"✅ {name}" if key == cur else name
 
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(label("Quality", "quality"), callback_data="mode:quality"),
@@ -1296,7 +1403,7 @@ def mode_keyboard(cur: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(label("Both", "both"), callback_data="mode:both"),
          InlineKeyboardButton(label("Episode", "episode"), callback_data="mode:episode")],
         [InlineKeyboardButton(label("Season", "season"), callback_data="mode:season")],
-        [InlineKeyboardButton("➥ CLOSE", callback_data="close_msg")]
+        [InlineKeyboardButton("ƈʅσʂҽ", callback_data="close_msg")]
     ])
 
 async def smode_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1304,9 +1411,10 @@ async def smode_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cur = get_user_smode(uid)
 
     text = (
+        "<tg-emoji emoji-id='5397782960512444700'>📌</tg-emoji> "
         "<b>Sticker Display Settings</b>\n\n"
-        "<blockquote>• Quality: Send stickers between quality groups\n"
-        "• Default: Send sticker at end of processing</blockquote>\n\n"
+        "<blockquote>• <tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> Quality: Send stickers between quality groups\n"
+        "• <tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> Default: Send sticker at end of processing</blockquote>\n\n"
         f"<b>Current mode:</b> {cur.capitalize()}"
     )
 
@@ -1323,6 +1431,12 @@ async def private_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = update.message
     uid = update.effective_user.id
+    # --- FSUB GATE ---
+    if FSUB_CHANNELS:
+        not_joined = await check_fsub(context.bot, uid)
+        if not_joined:
+            await send_fsub_message(update.message, context.bot, not_joined, uid)
+            return
 
     # Ignore commands
     if msg.text and msg.text.strip().startswith("/"):
@@ -1339,7 +1453,7 @@ async def private_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             set_user_dump(uid, dump_id)
 
             await msg.reply_text(
-                f"Dᴜᴍᴘ Cʜᴀɴɴᴇʟ Aᴅᴅᴇᴅ: <code>{dump_id}</code>\n\n"
+                f"<tg-emoji emoji-id='5206607081334906820'>✔️</tg-emoji> Dᴜᴍᴘ Cʜᴀɴɴᴇʟ Aᴅᴅᴇᴅ: <code>{dump_id}</code>\n\n"
                 "Yᴏᴜʀ Fɪʟᴇs Wɪʟʟ Nᴏᴡ Bᴇ Sᴇɴᴛ Tᴏ Tʜᴇ Sᴇʟᴇᴄᴛᴇᴅ Cʜᴀɴɴᴇʟ.",
                 parse_mode=constants.ParseMode.HTML
             )
@@ -1357,7 +1471,7 @@ async def private_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             set_user_dump(uid, int(ch_id))
 
             await msg.reply_text(
-                f"Dᴜᴍᴘ Cʜᴀɴɴᴇʟ Aᴅᴅᴇᴅ: <code>{ch_id}</code>\n\n"
+                f"<tg-emoji emoji-id='5206607081334906820'>✔️</tg-emoji> Dᴜᴍᴘ Cʜᴀɴɴᴇʟ Aᴅᴅᴇᴅ: <code>{ch_id}</code>\n\n"
                 "Yᴏᴜʀ Fɪʟᴇs Wɪʟʟ Nᴏᴡ Bᴇ Sᴇɴᴛ Tᴏ Tʜᴇ Sᴇʟᴇᴄᴛᴇᴅ Cʜᴀɴɴᴇʟ.",
                 parse_mode=constants.ParseMode.HTML
             )
@@ -1365,7 +1479,7 @@ async def private_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # invalid input
         await msg.reply_text(
-            "❌ Please send a valid channel ID like <code>-1001234567890</code> "
+            "<tg-emoji emoji-id='5210952531676504517'>❌</tg-emoji> Please send a valid channel ID like <code>-1001234567890</code> "
             "or forward a message from the channel.",
             parse_mode=constants.ParseMode.HTML
         )
@@ -1399,7 +1513,7 @@ async def private_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # send queue count + store that bot message id too
     r = await msg.reply_text(
-        f"{total} Fɪʟᴇ Aᴅᴅᴇᴅ Iɴ Qᴜᴇᴜᴇ",
+        f"<tg-emoji emoji-id='5424972470023104089'>🔥</tg-emoji> {total} Fɪʟᴇ Aᴅᴅᴇᴅ Iɴ Qᴜᴇᴜᴇ",
         parse_mode=constants.ParseMode.HTML
     )
 
@@ -1409,6 +1523,26 @@ async def private_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
+    # ---------- FSUB CHECK (Try Again button) ----------
+    if query.data.startswith("fsub_check:"):
+        uid = query.from_user.id
+        not_joined = await check_fsub(context.bot, uid)
+        if not_joined:
+            await send_fsub_message(query, context.bot, not_joined, uid)
+        else:
+            # all joined — delete fsub message, let them retry their action
+            try:
+                await query.message.delete()
+            except:
+                pass
+            await context.bot.send_photo(
+                chat_id=uid,
+                photo="https://i.pinimg.com/736x/30/b3/ac/30b3ac402f93eb491681eb4f667f2657.jpg",
+                caption="<blockquote><tg-emoji emoji-id='5325547803936572038'>✨</tg-emoji> <b>Tʜɴx ғᴏʀ Jᴏɪɴɪɴɢ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ ɴᴏᴡ ғᴇᴇʟ ғʀᴇᴇ ᴛᴏ ᴜsᴇ ᴍᴇ ....</b></blockquote>",
+                parse_mode=constants.ParseMode.HTML
+            )
+        return
 
     # ---------- CLOSE ----------
     if query.data == "close_msg":
@@ -1424,28 +1558,28 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             media=InputMediaPhoto(
                 media=PHOTO_HELP,
                 caption=(
+                    "<tg-emoji emoji-id='5224607267797606837'>☄️</tg-emoji> "
                     "<b>Ƈᴏᴍᴍᴀɴᴅs:</b>\n"
-                    "<blockquote expandable>/start - Sᴛᴀʀᴛ Tʜᴇ Bᴏᴛ\n"
-                    "/help - Sʜᴏᴡ ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ\n"
-                    "/clear - Cʟᴇᴀʀ ʏᴏᴜʀ ꜰɪʟᴇ qᴜᴇᴜᴇ\n"
-                    "/sort - Process your queued files\n"
-                    "/setdump - Sᴇᴛ A Dᴜᴍᴘ Cʜᴀɴɴᴇʟ\n"
-                    "/getdump - Gᴇᴛ Dᴜᴍᴘ Cʜᴀɴɴᴇʟ ID & Lɪɴᴋ\n"
-                    "/deldump - Dᴇʟᴇᴛᴇ Yᴏᴜʀ Dᴜᴍᴘ Cʜᴀɴɴᴇʟ\n"
-                    "/setcap - Sᴇᴛ ᴀ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ\n"
-                    "/getcap - Gᴇᴛ ʏᴏᴜʀ ꜰɪʟᴇ ᴄᴀᴘᴛɪᴏɴ\n"
-                    "/resetcap - Dᴇʟᴇᴛᴇ ʏᴏᴜʀ ᴄᴀᴘᴛɪᴏɴ\n"
-                    "/setsticker - Sᴇᴛ ᴀ ᴄᴜꜱᴛᴏᴍ ꜱᴛɪᴄᴋᴇʀ\n"
-                    "/getsticker - Gᴇᴛ ʏᴏᴜʀ ꜱᴛɪᴄᴋᴇʀ\n"
-                    "/delsticker - Dᴇʟᴇᴛᴇ ʏᴏᴜʀ ꜱᴛɪᴄᴋᴇʀ</blockquote>\n\n"
-                    "<b>Fᴇᴀᴛᴜʀᴇs:</b>\n"
-                    "<blockquote>1. Aᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴇxᴛʀᴀᴄᴛ ᴇᴘɪsᴏᴅᴇ ɴᴜᴍʙᴇʀs ᴀɴᴅ ϙᴜᴀʟɪᴛɪᴇs.\n"
-                    "2. Sᴏʀᴛ ꜰɪʟᴇs ʙʏ ᴇᴘɪsᴏᴅᴇ ɴᴜᴍʙᴇʀ.\n"
-                    "3. Cᴜsᴛᴏᴍ Dᴜᴍᴘ Cʜᴀɴɴᴇʟ,ᴄᴀᴘᴛɪᴏɴs ᴀɴᴅ sᴛɪᴄᴋᴇʀs sᴜᴘᴘᴏʀᴛ.\n"
-                    "4. Cʟᴇᴀʀ ʏᴏᴜʀ ǫᴜᴇᴜᴇ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴀꜰᴛᴇʀ ᴘʀᴏᴄᴇssɪɴɢ.</blockquote>\n\n"
-                    "<blockquote>Cᴏɴᴛᴀᴄᴛ Fᴏʀ Mᴏᴅɪꜰɪᴄᴀᴛɪᴏɴꜱ - @ITSANIMEN</blockquote>"
-                    
-
+                    "<blockquote expandable><tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> /start - Sᴛᴀʀᴛ Tʜᴇ Bᴏᴛ\n"
+                    "<tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> /help - Sʜᴏᴡ ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ\n"
+                    "<tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> /clear - Cʟᴇᴀʀ ʏᴏᴜʀ ꜰɪʟᴇ qᴜᴇᴜᴇ\n"
+                    "<tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> /sort - Process your queued files\n"
+                    "<tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> /setdump - Sᴇᴛ A Dᴜᴍᴘ Cʜᴀɴɴᴇʟ\n"
+                    "<tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> /getdump - Gᴇᴛ Dᴜᴍᴘ Cʜᴀɴɴᴇʟ ID & Lɪɴᴋ\n"
+                    "<tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> /deldump - Dᴇʟᴇᴛᴇ Yᴏᴜʀ Dᴜᴍᴘ Cʜᴀɴɴᴇʟ\n"
+                    "<tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> /setcap - Sᴇᴛ ᴀ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ\n"
+                    "<tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> /getcap - Gᴇᴛ ʏᴏᴜʀ ꜰɪʟᴇ ᴄᴀᴘᴛɪᴏɴ\n"
+                    "<tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> /resetcap - Dᴇʟᴇᴛᴇ ʏᴏᴜʀ ᴄᴀᴘᴛɪᴏɴ\n"
+                    "<tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> /setsticker - Sᴇᴛ ᴀ ᴄᴜꜱᴛᴏᴍ ꜱᴛɪᴄᴋᴇʀ\n"
+                    "<tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> /getsticker - Gᴇᴛ ʏᴏᴜʀ ꜱᴛɪᴄᴋᴇʀ\n"
+                    "<tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> /delsticker - Dᴇʟᴇᴛᴇ ʏᴏᴜʀ ꜱᴛɪᴄᴋᴇʀ</blockquote>\n\n"
+                    "<b><tg-emoji emoji-id='5224607267797606837'>☄️</tg-emoji> Fᴇᴀᴛᴜʀᴇs:</b>\n"
+                    "<blockquote><tg-emoji emoji-id='5793963560077890506'>🔢</tg-emoji> Aᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴇxᴛʀᴀᴄᴛ ᴇᴘɪsᴏᴅᴇ ɴᴜᴍʙᴇʀs ᴀɴᴅ ϙᴜᴀʟɪᴛɪᴇs.\n"
+                    "<tg-emoji emoji-id='5794439090266968914'>🔢</tg-emoji> Sᴏʀᴛ ꜰɪʟᴇs ʙʏ ᴇᴘɪsᴏᴅᴇ ɴᴜᴍʙᴇʀ.\n"
+                    "<tg-emoji emoji-id='5794315824705574093'>🔢</tg-emoji> Cᴜsᴛᴏᴍ Dᴜᴍᴘ Cʜᴀɴɴᴇʟ, ᴄᴀᴘᴛɪᴏɴs ᴀɴᴅ sᴛɪᴄᴋᴇʀs sᴜᴘᴘᴏʀᴛ.\n"
+                    "<tg-emoji emoji-id='5794187113125648580'>🔢</tg-emoji> {file_name} ᴡᴏʀᴋs ꜰᴏʀ ᴀʟʟ ꜰɪʟᴇ ᴛʏᴘᴇs.\n"
+                    "<tg-emoji emoji-id='5794310305672599257'>🔢</tg-emoji> Cʟᴇᴀʀ ʏᴏᴜʀ ǫᴜᴇᴜᴇ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴀꜰᴛᴇʀ ᴘʀᴏᴄᴇssɪɴɢ.</blockquote>\n\n"
+                    "<blockquote><tg-emoji emoji-id='5224607267797606837'>☄️</tg-emoji> Cᴏɴᴛᴀᴄᴛ Fᴏʀ Mᴏᴅɪꜰɪᴄᴀᴛɪᴏɴꜱ <tg-emoji emoji-id='5215229232476596064'>➡️</tg-emoji> @ITSANIMEN</blockquote>"
                 ),
                 parse_mode=constants.ParseMode.HTML
             ),
@@ -1459,14 +1593,17 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             media=InputMediaPhoto(
                 media=PHOTO_MAIN,
                 caption=(
-                    "<blockquote>Wᴇʟᴄᴏᴍᴇ ᴛᴏ ʏᴏᴜʀ ᴀʟʟ-ɪɴ-ᴏɴᴇ Fɪʟᴇ Mᴀɴᴀɢᴇᴍᴇɴᴛ Assɪsᴛᴀɴᴛ! 📂✨</blockquote>\n\n"
-                    "<blockquote>Eᴀsɪʟʏ ᴍᴀɴᴀɢᴇ, ᴏʀɢᴀɴɪᴢᴇ, ᴀɴᴅ sʜᴀʀᴇ ʏᴏᴜʀ ꜰɪʟᴇs ᴡɪᴛʜᴏᴜᴛ ᴀɴʏ \n"
+                    "<blockquote>"
+                    "<tg-emoji emoji-id='6296577138615125756'>✅</tg-emoji> "
+                    "Wᴇʟᴄᴏᴍᴇ ᴛᴏ ʏᴏᴜʀ ᴀʟʟ-ɪɴ-ᴏɴᴇ Fɪʟᴇ Mᴀɴᴀɢᴇᴍᴇɴᴛ Assɪsᴛᴀɴᴛ! <tg-emoji emoji-id='5794323465452394551'>🎚</tg-emoji>"
+                    "</blockquote>\n\n"
+                    "<blockquote><tg-emoji emoji-id='5793936020747589223'>✅</tg-emoji> Eᴀsɪʟʏ ᴍᴀɴᴀɢᴇ, ᴏʀɢᴀɴɪᴢᴇ, ᴀɴᴅ sʜᴀʀᴇ ʏᴏᴜʀ ꜰɪʟᴇs ᴡɪᴛʜᴏᴜᴛ ᴀɴʏ \n"
                     "ʜᴀssʟᴇ. Sᴀʏ ɢᴏᴏᴅʙʏᴇ ᴛᴏ ᴍᴇssʏ ꜰɪʟᴇ ɴᴀᴍᴇs ᴀɴᴅ ᴄᴏɴꜰᴜsɪɴɢ \n"
-                    "ʀᴇsᴏʟᴜᴛɪᴏɴs – ᴡᴇ’ᴠᴇ ɢᴏᴛ ʏᴏᴜ ᴄᴏᴠᴇʀᴇᴅ!</blockquote>\n\n"
-                    "<blockquote><b>◈ MAINTAINED BY : "
-                    "<a href='https://t.me/ITSANIMEN'>彡 ΔNI_OTΔKU 彡</a>"
+                    "ʀᴇsᴏʟᴜᴛɪᴏɴs <tg-emoji emoji-id='6255512604110751681'>🔻</tg-emoji> ᴡᴇ'ᴠᴇ ɢᴏᴛ ʏᴏᴜ ᴄᴏᴠᴇʀᴇᴅ! <tg-emoji emoji-id='5789527674904906989'>🥜</tg-emoji></blockquote>\n\n"
+                    "<blockquote><b><tg-emoji emoji-id='5213297128553590938'>➡️</tg-emoji> MAINTAINED BY <tg-emoji emoji-id='5212954622091603940'>❤️</tg-emoji> "
+                    "<a href='https://t.me/ITSANIMEN'>彡 ΔNI_OTΔKU 彡</a> <tg-emoji emoji-id='5796642129316943457'>⭐️</tg-emoji>"
                     "</b></blockquote>"
-                ),
+               ),
                 parse_mode=constants.ParseMode.HTML
             ),
             reply_markup=start_keyboard()
@@ -1504,12 +1641,13 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         cur = picked
         text = (
+            f"<tg-emoji emoji-id='5424972470023104089'>🔥</tg-emoji> "
             f"<b>Select Sorting Mode (Current: {cur.capitalize()})</b>\n\n"
-            "<blockquote>• Quality: Sort by quality then episode\n"
-            "• Title: Sort by title then episode\n"
-            "• Both: Sort by title, quality, then episode\n"
-            "• Episode: Default sorting by episode only\n"
-            "• Season: Sort by season, then quality, then episode</blockquote>"
+            "<blockquote>• <tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> Quality: Sort by quality then episode\n"
+            "• <tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> Title: Sort by title then episode\n"
+            "• <tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> Both: Sort by title, quality, then episode\n"
+            "• <tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> Episode: Default sorting by episode only\n"
+            "• <tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> Season: Sort by season, then quality, then episode</blockquote>"
         )
 
         await query.edit_message_text(
@@ -1530,9 +1668,10 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         cur = picked
         text = (
+            "<tg-emoji emoji-id='5796189499893487111'>⚙️</tg-emoji> "
             "<b>Sticker Display Settings</b>\n\n"
-            "<blockquote>• Quality: Send stickers between quality groups\n"
-            "• Default: Send sticker at end of processing</blockquote>\n\n"
+            "<blockquote>• <tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> Quality: Send stickers between quality groups\n"
+            "• <tg-emoji emoji-id='5215684653628795584'>⚫️</tg-emoji> Default: Send sticker at end of processing</blockquote>\n\n"
             f"<b>Current mode:</b> {cur.capitalize()}"
         )
 
@@ -1547,17 +1686,18 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def broadcast_restart(application: Application):
     RE_caption = (
         "<blockquote expandable>"
-        "🔄 <b>Bot Restarted Successfully!\n\n"
-        "✅ New changes have been deployed.\n"
-        "🚀 Bot is now online and running smoothly.\n\n"
-        "Thank you for your patience.</b>"
+        "<tg-emoji emoji-id='5794384372383618435'>🤔</tg-emoji> "
+        "<b><tg-emoji emoji-id='5258093637450866522'>🤖</tg-emoji> Bot Restarted Successfully!\n\n"
+        "<tg-emoji emoji-id='6296577138615125756'>✅</tg-emoji> New changes have been deployed.\n"
+        "<tg-emoji emoji-id='6296577138615125756'>✅ </tg-emoji> Bot is now online and running smoothly.\n\n"
+        "<tg-emoji emoji-id='6255963511252322252'>✔️ </tg-emoji> Thank you for your patience.</b>"
         "</blockquote>"
     )
 
     buttons = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("ʂυρρσɾƚ", url="https://t.me/BotifyX_support"),
+                InlineKeyboardButton("ʂυρρσɾƚ", url="https://t.me/+qgN6ehtqRNpkZDVl"),
                 InlineKeyboardButton("Cԋαɳɳҽʅ", url="https://t.me/BotifyX_Pro_Botz")
             ]
         ]
@@ -1595,7 +1735,7 @@ async def post_init(application: Application):
     try:
         await application.bot.send_message(
             OWNER_ID,
-            "<b>🤖 Bot has started successfully!</b>",
+            "<blockquote><b><tg-emoji emoji-id='5258093637450866522'>🤖</tg-emoji> Sᴇɴᴘᴀɪ I'ᴍ ᴀʟɪᴠᴇ</b></blockquote>",
             parse_mode=constants.ParseMode.HTML
         )
     except:
@@ -1642,3 +1782,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# botifyx-bots || @BotifyX_Pro_Botz || @ITsANIMEN 

@@ -1750,6 +1750,7 @@ def main():
     application = (
         Application.builder()
         .token(BOT_TOKEN)
+        .concurrent_updates(True)
         .job_queue(JobQueue())
         .post_init(post_init)
         .build()
